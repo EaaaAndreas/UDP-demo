@@ -7,13 +7,13 @@ board_led = Pin("LED", Pin.OUT, value=0) # Used for indicating listening
 led = Pin(2, Pin.OUT, value=0) # The LED used for interfacing
 
 # Setup WLAN
-wlan = WLAN(WLAN.IF_STA)
-
-wlan.active(True)
-wlan.connect("SSID", "PASSWORD")
-
-while not wlan.isconnected():
-    idle()
+wlan = WLAN()
+#
+#wlan.active(True)
+#wlan.connect("SSID", "PASSWORD")
+#
+#while not wlan.isconnected():
+#    idle()
 
 # Setup socket
 soc = socket.socket(socket.AF_INET, socket.SOCK_DGRAM) # Internet protocol, UDP

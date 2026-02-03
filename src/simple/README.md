@@ -115,7 +115,7 @@ except Exception as e:
     raise e
 ```
 For at lytte, skal vi blot kalde `socket.recvfrom()`. Vi angiver en `buffsize=1024`, som angiver, hvor mange bit vi kan
-modtage. Denne kan dog undlades, så `socket.recvfrom()` kaldes uden argumenter.
+modtage.
 `socket.recvfrom()` returnerer en tuple med to værdier `(data, addr)`. `data` er den *bit-stream* der er modtaget,
 `addr` er den IP-adresse, beskeden er kommet fra.
 

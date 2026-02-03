@@ -1,5 +1,8 @@
 # src/UDP-listener/UDP_listener.py
 import socket
+import re
+import gc
+gc.collect()
 
 STATUS_CLOSED = 0
 STATUS_BOUND = 1
@@ -10,13 +13,16 @@ _used_ports = set()
 class UDPListener:
     _addr = '0.0.0.0'
     _status = STATUS_CLOSED
-    def __init__(self, port:int|None=None, buff_size:int|None=None, addr:str|None=None):
+    _port = None
+    _callbacks = {}
+    def __init__(self, port:int|None=None, buff_size:int=1024, addr:str|None=None):
+        gc.collect()
         if port is None:
             port = 50000
             while port in _used_ports:
                 port += 1
         self.set_port(port)
-        self.set_buffsize(buff_size)
+        self.buffsize = buff_size
         if addr:
             self.addr = addr
         self._start_socket()
@@ -26,29 +32,35 @@ class UDPListener:
         _used_ports.remove(self.port)
         self._status = STATUS_CLOSED
 
+    def start_listening(self) -> tuple[bytes, str]:
+        data, sender = self.recv()
+        data = data.decode('ascii')
+        for cmd in self._callbacks.keys():
+            command = re.search(cmd + r'\s+(\S+)(?:\s|\Z)', data.lower())
+            if command:
+                self._callbacks[cmd](command.group(1), sender)
+        return data, sender
+
     def recv(self, buff_size:int|None=None):
-        return self.socket.recvfrom(buff_size | self.buffsize)
+        if not self.status() == STATUS_BOUND:
+            self._start_socket()
+        print("Listening on port", self.port)
+        if buff_size is None:
+            if self.buffsize:
+                buff_size = self.buffsize
+            else:
+                return self.socket.recvfrom(1024)
+        try:
+            ans = self.socket.recvfrom(buff_size)
+        finally:
+            self.socket.close()
+            self._status = STATUS_CLOSED
+        return ans
 
     def _start_socket(self) -> None:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.bind((self.addr, self.port))
         self._status = STATUS_BOUND
-
-    def set_buffsize(self, buffsize:int|None) -> None:
-        """
-        Set the buffer size for the bitstream. This determines how much data can be received on the socket.
-        :param buffsize: The max buffersize.
-        :type buffsize: int | None
-        :return: None
-        """
-        if isinstance(buffsize, int):
-            if buffsize == 0:
-                buffsize = None
-            elif buffsize < 0:
-                raise ValueError(f"Buffer size must be greater than 0. Got '{buffsize}'")
-        elif buffsize is not None:
-            raise TypeError(f"Buffer must be integer or None. Got '{type(buffsize)}'")
-        self._buff_size = buffsize
 
     def set_port(self, port:int) -> None:
         if not isinstance(port, int):
@@ -59,25 +71,40 @@ class UDPListener:
             raise ValueError(f"Port out of range. '{port}'. Port must be 0 < port <= 65535")
         if port in _used_ports:
             raise ValueError(f"Port '{port}' is already in use")
-        _used_ports.remove(self.port)
+        if self.port:
+            _used_ports.remove(self.port)
         _used_ports.add(port)
         self._port = port
 
     def status(self) -> int:
         return self._status
 
+    def add_command(self, command:str, callback:object) -> None:
+        self._callbacks[command.strip().lower()] = callback
+
+    def remove_command(self, command:str) -> None:
+        command = command.strip().lower()
+        if command in self._callbacks.keys():
+            self._callbacks.pop(command)
+        else:
+            raise IndexError(f"The command '{command}' was not found.")
+
     @property
     def port(self) -> int:
         return self._port
-    @port.setter
-    def port(self, *args) -> None:
-        self.set_port(*args)
     @property
     def buffsize(self) -> int|None:
         return self._buffsize
     @buffsize.setter
-    def buffsize(self, *args):
-        self.set_buffsize(*args)
+    def buffsize(self, buffsize:int|None):
+        if buffsize is None:
+            buffsize = 1024
+        elif isinstance(buffsize, int):
+            if buffsize < 0:
+                raise ValueError(f"Buffer size must be greater than 0. Got '{buffsize}'")
+        elif buffsize is not None:
+            raise TypeError(f"Buffer must be integer or None. Got '{type(buffsize)}'")
+        self._buffsize = buffsize
     @property
     def addr(self) -> str:
         return self._addr
@@ -96,5 +123,5 @@ class UDPListener:
     def __del__(self) -> None:
         try:
             self.close()
-        except:
-            pass
+        except Exception as e:
+            raise e
