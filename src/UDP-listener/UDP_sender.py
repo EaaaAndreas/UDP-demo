@@ -1,7 +1,12 @@
 # src/UDP-listener/UDP_sender.py
 import socket
 
-def get_local_ip():
+def get_local_ip() -> str:
+    """
+    A function to get your local IP on just about any port.
+    :return: Local IP-address: 'v.x.y.z'
+    :rtype: str
+    """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         s.connect(('8.8.8.8', 80))
@@ -22,60 +27,69 @@ class UDPSocket:
     STATE_CLOSED = -1
     STATE_OPEN = 0
     STATE_SUCCESS = 1
-    timeout = 5 # sec
-    _port = None
-    __bound = False
-    def __init__(self, address='0.0.0.0', port=None, encoding='ascii'):
-        self.address = address
+
+    def __init__(self, address=None, port=None, encoding='ascii'):
+        self._timeout = 5  # sec
+        self._addr = '0.0.0.0'
+        self._port = None
+        self.__bound = False
+        if address:
+            self.address = address
         self.port = port
         self.encoding = encoding
         self._sock: socket.socket|None = None
         self.__state = self.STATE_CLOSED
 
     def init(self) -> None:
-        print(f"Opening socket on {self._addr}:{self._port}") # Debugging
-        if self._sock:
+        print(f"Opening socket on {self.address}:{self.port}") # Debugging
+        if self.socket and not self.state == self.STATE_CLOSED:
             self.close()
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.__state = self.STATE_OPEN
 
         # Either do
-        self._sock.settimeout(self.timeout)
+        self.socket.settimeout(self.timeout)
         # Or
         # self._sock.setblocking(False)
 
-        self._sock.bind((self._addr, self._port))
+        self.socket.bind((self._addr, self.port))
         self.__bound = True
 
     def close(self) -> int:
         print("Closing socket") # Debugging
-        self._sock.close()
+        self.socket.close()
         state = self.__state
         self.__state = self.STATE_CLOSED
         return state
 
     def sendto(self, data:str|bytes, addr:tuple[str, int]):
-        print("Sending data:", data) # Debugging
+        print(f"Sending data '{data}' to {addr[0]}:{addr[1]}") # Debugging
         # Check the given port
         if isinstance(data, str):
             data = data.encode(self.encoding)
         # Send data
-        self._sock.sendto(data, addr)
+        self.socket.sendto(data, addr)
         self.__state = self.STATE_SUCCESS
 
-    def recv(self, bufsize=1024) -> tuple:
+    def recv(self, bufsize=1024, raise_timeout_error=True) -> tuple|None:
         print("Listening on", self._sock) # Debugging
 
-        # Setup socket
-
-        msg = self._sock.recvfrom(bufsize)
-
+        try:
+            msg = self.socket.recvfrom(bufsize)
+            print("Received data:", *msg)
+        except TimeoutError as e:
+            if raise_timeout_error:
+                raise e
+            print(f"Timed out while listening on {self.address}:{self.port}")
+            msg = None
         self.__state = self.STATE_SUCCESS
         return msg
 
     @property
-    def address(self) -> tuple[str, int]:
-        return self._addr, self._port
+    def address(self) -> str:
+        if self._addr == "0.0.0.0":
+            return get_local_ip()
+        return self._addr
     @address.setter
     def address(self, addr:str):
         if ':' in addr:
@@ -101,10 +115,23 @@ class UDPSocket:
             _used_ports.discard(port)
         self._port = port
         _used_ports.add(port)
-
     @property
     def bound(self):
         return self.__bound
+    @property
+    def state(self):
+        return self.__state
+    @property
+    def socket(self):
+        return self._sock
+    @property
+    def timeout(self):
+        return self._timeout
+    @timeout.setter
+    def timeout(self, timeout):
+        if self.socket:
+            self.socket.settimeout(timeout)
+        self._timeout = timeout
 
     def __enter__(self):
         self.init()
@@ -115,17 +142,17 @@ class UDPSocket:
 
     def __del__(self):
         try:
-            self._sock.close()
+            self.socket.close()
         except:
             pass
         try:
-            _used_ports.discard(self._port)
+            _used_ports.discard(self.port)
         except:
             pass
 
 if __name__ == '__main__':
     print(get_local_ip())
 
-    #with UDPSocket() as sender, UDPSocket() as receiver:
-    #    sender.sendto("Hello", ('192.168.0.26', receiver.port))
-    #    print(receiver.recv())
+    with UDPSocket() as sender, UDPSocket() as receiver:
+        sender.sendto("Hello", (get_local_ip(), receiver.port))
+        print(receiver.recv())
