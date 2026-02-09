@@ -7,5 +7,5 @@ Du kan se et eksempel på brug, i bunden af scriptet.
 # Download
 Download demoen via terminalen.
 ```bash
-git clone https://github.com/EaaaAndreas/****** ./UDP-demo
+git clone https://github.com/EaaaAndreas/UDP-demo ./UDP-demo
 ```
